@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset=utf-8>
+		<title>colori 3D</title>
+		<style>
+			body { margin: 0; }
+			canvas { width: 100%; height: 100% }
+			#overlay {
+				position: absolute;
+				top: 10px;
+				width: 100%;
+				text-align: center;
+				z-index: 100;
+				display:block;
+				font-family: sans-serif;
+            }
+            .targaColore {
+				position: absolute;
+				background: white;
+				width: 250px;
+				padding: 10px;
+				pointer-events:none;
+			}
+			.nomeColore {
+				 background: white;
+				 padding: 4px;
+				 margin-left: 54px;
+			}
+			.codColore {
+				 background: white;
+				 padding: 4px;
+				 margin-left: 54px;
+			}
+			.cerchioColore {
+				position: absolute;
+				border-radius: 50%;
+				width: 20px;
+                height: 20px;
+                border: 8px ridge;
+                border-color: #ccc;
+			}
+		</style>
+		<script src="js/three.js"></script>
+		<script src="js/Matrix3.js" type="module"></script>
+		<script src="js/OrbitControls.js" type="module"></script>
+		<script src="js/Projector.js" type="module"></script>
+        <script src="js/chroma.min.js"></script>
+        <script src="js/color3D.js"></script
+	</head>
+	<body>
+	</body>
+</html>
