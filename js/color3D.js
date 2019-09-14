@@ -6,14 +6,16 @@ var THREE = THREE || {};
 var chroma = chroma || {};
 var ColorViewer = function () {
     "use strict";
-    var frameCount = 0, camera, scena, radice, renderer, vicino = 1, lontano = 200,
+    var camera, scena, radice, renderer, vicino = 1, lontano = 10000,
         urlColori = "https://unpkg.com/color-name-list/dist/colornames.json",
+        //urlColori = "data/colors.json",
         spriteCerchio = "img/punto1.png",
         coloreSfondo = "#d4d4d4",
-        listaColori, lastTime, fps, delta = 0, oldTime = 0,
-        vec = new THREE.Vector3(0,0,0), trackPoints = [],
-        overlay, nomeColore, codColore, targaColore, cerchioColore,// entità HTML
-        projector, mouseVector, canvasMouseVector, raycaster, intersects,
+        windowBorder = 8,
+        listaColori, trackPoints = new Map(),
+        over, // entità HTML
+        projector, mouseVector, raycaster, intersects,
+        mouseDown = false,
         intersection, controls, nuvola, particleSystem, spritePunto, trackedVert = 0,
         dimensionePunto = 2, mLMS = new THREE.Matrix3(), mRGB = new THREE.Matrix3();
     
@@ -34,10 +36,14 @@ var ColorViewer = function () {
         var materiale = new THREE.PointsMaterial({
             vertexColors: THREE.VertexColors,
             //size: dimensionePunto,
-            size: 10,
-            sizeAttenuation: false,
+            size: 3,
+            sizeAttenuation: true,
             map: spritePunto,
+            // discarding alpha value and clipping at 0.1
+            blending: THREE.NormalBlending, //THREE.NoBlending,            
+            alphaTest: 0.10,
             transparent: true,
+            opacity: 0.8,
             depthWrite: true,
             depthTest: true
         });
@@ -70,65 +76,121 @@ var ColorViewer = function () {
         scena.add(particleSystem);
     }
 
-
-    function status(response) {
-        if (response.status >= 200 && response.status < 300) {
-            return Promise.resolve(response);
-        } else {
-            return Promise.reject(new Error(response.statusText));
-        }
-    }
-
-
     function onMouseMove(e) {
         e.preventDefault();
         mouseVector.x = 2 * (e.clientX / window.innerWidth) - 1;
         mouseVector.y = 1 - 2 * (e.clientY / window.innerHeight);
-        canvasMouseVector.x = e.clientX;
-        canvasMouseVector.y = e.clientY;
+    }
+    
+    function onMouseDown(e) {
+        e.preventDefault();
+        mouseDown = true;
+        // TODO: test wether pointer is under the mouse
+    }
+
+    function onMouseUp(e) {
+        e.preventDefault();
+        mouseDown = false;
     }
     
     function reverseTrackPoint(vert=trackedVert) {
         let x = particleSystem.geometry.attributes.position.getX(vert);
         let y = particleSystem.geometry.attributes.position.getY(vert);
         let z = particleSystem.geometry.attributes.position.getZ(vert);
-        vec.fromArray([x, y, z]);
+        let vec = new THREE.Vector3(x, y, z);
         vec.project(camera);
         vec.x = Math.round((vec.x + 1) / 2 * window.innerWidth);
         vec.y = Math.round(-(vec.y - 1) / 2 * window.innerHeight);
+        return vec;
     }
 
     function castRay() {
         raycaster.setFromCamera(mouseVector, camera);
         intersects = raycaster.intersectObject(particleSystem);
-        //window.console.log('intersections: ' + intersects.length);
         intersection = ( intersects.length ) > 0 ? intersects[ 0 ] : null;
         
         if (intersection !== null) {
-            trackedVert = intersection.index;
-            reverseTrackPoint();        
-            var indice = intersects[0].index;
-            var colore = listaColori[indice].name;
-            var colhex = listaColori[indice].hex;
-            nomeColore.innerText = colore;
-            codColore.innerText = colhex;
-            targaColore.style.background = colhex;
-            targaColore.style.left = vec.x + 10 + "px";
-            targaColore.style.top = vec.y + 15 + "px";
-            cerchioColore.style.left = vec.x -25 + "px";
-            cerchioColore.style.top = vec.y -30 + "px";
-            cerchioColore.style.borderColor = colhex;
-        } else {
-            reverseTrackPoint();
-            targaColore.style.left = vec.x + 10 + "px";
-            targaColore.style.top = vec.y + 15 + "px";
-            cerchioColore.style.left = vec.x -25 + "px";
-            cerchioColore.style.top = vec.y -30 + "px";
+            if (mouseDown) {
+                if (trackPoints.has(intersection.index)) {
+                    removeTrackPoint(intersection.index);
+                    return; 
+                } else {
+                    addTrackPoint(intersection.index);   
+                }
+            }
         }
     }
     
+    function addTrackPoint(indexT) {
+        let tp = {};
+        let vec = reverseTrackPoint(indexT);  
+        //trackPoint DOM elements
+        tp.targaColore = document.createElement("div");
+        tp.nomeColore = document.createElement("div");
+        tp.codColore = document.createElement("div");
+        tp.cerchioColore = document.createElement("div");
+        tp.targaColore.className = "targaColore i" + indexT;
+        tp.nomeColore.className = "nomeColore";
+        tp.codColore.className = "codColore";
+        tp.cerchioColore.className = "cerchioColore i" + indexT;
+        let colhex = listaColori[indexT].hex;
+        tp.targaColore.style.background = colhex;
+        tp.targaColore.style.left = vec.x + 10 + "px";
+        tp.targaColore.style.top = vec.y + 15 + "px";
+        tp.cerchioColore.style.left = vec.x -25 + "px";
+        tp.cerchioColore.style.top = vec.y -30 + "px";
+        tp.cerchioColore.style.borderColor = colhex;
+        tp.nomeColore.innerText = listaColori[indexT].name;
+        tp.codColore.innerText = colhex;
+        let tar = over.appendChild(tp.targaColore);
+        tar.appendChild(tp.nomeColore);
+        tar.appendChild(tp.codColore);
+        over.appendChild(tp.cerchioColore);
+        trackPoints.set(indexT,tp);
+    }
+    
+    function addPointer() {
+        let vec = new THREE.Vector2(10, 10);  
+        //Pointer DOM elements
+        let size = windowSized();
+        let pointer = document.createElement("div");
+        pointer.className = "pointerColore";
+        pointer.style.left = size[0]/3 + "px";
+        pointer.style.top = size[1]/3 + "px";
+        pointer.style.borderColor = coloreSfondo;
+        over.appendChild(pointer);
+        //update pointer position
+    }
+    
+    function removeTrackPoint(indexT) {
+        let tp = trackPoints.get(indexT);
+        // remove DOM elements
+        tp.codColore.remove();
+        tp.nomeColore.remove();
+        tp.cerchioColore.remove();
+        tp.targaColore.remove();
+        trackPoints.delete(indexT);
+    }
+    
+    function renderTrackPoints() {
+        trackPoints.forEach(renderTrackPoint);
+    }
+    
+    function renderTrackPoint(tp, indexT) {
+        let vec = reverseTrackPoint(indexT);
+        tp.targaColore.style.left = vec.x + 10 + "px";
+        tp.targaColore.style.top = vec.y + 10 + "px";
+        tp.cerchioColore.style.left = vec.x -17 + "px";
+        tp.cerchioColore.style.top = vec.y -27 + "px";
+    }
+    
+    function windowSized() {
+        return [window.innerWidth - 2 * windowBorder, window.innerHeight - 2 * windowBorder];
+    }
+    
     function onWindowResize() {
-        var width = window.innerWidth, height = window.innerHeight;
+        let size = windowSized();
+        let width = size[0], height = size[1];
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
         renderer.setSize(width, height);
@@ -141,16 +203,29 @@ var ColorViewer = function () {
         camera.position.set(-10, 30, -130);
         camera.lookAt(new THREE.Vector3(0, 0, 0));
         radice = new THREE.Object3D();
+        radice;
         renderer = new THREE.WebGLRenderer({
             logging: true,
-            antialias: true});
-        renderer.setSize(window.innerWidth -10, window.innerHeight -10);
+            antialias: true,
+            // rotating the scene will cause glitches of transparent textures
+            // I therefore disable alpha blending in order to treat each
+            // texture ad opaque, and enable aplha test discarding what is
+            // not completely opaque.
+            sortObjects: true});
+        let size = windowSized();
+        renderer.setSize(size[0],size[1]);
+        renderer.domElement.style.paddingTop = windowBorder + "px";
+        renderer.domElement.style.paddingLeft = windowBorder + "px";
         projector = new THREE.Projector();
+        projector;
         mouseVector = new THREE.Vector2();
-        canvasMouseVector = new THREE.Vector2();
         raycaster = new THREE.Raycaster();
         raycaster.params.Points.threshold = 0.5;
         window.addEventListener("mousemove", onMouseMove, false);
+        window.addEventListener("mousedown", onMouseDown, false);
+        window.addEventListener("mouseup", onMouseUp, false);
+        //window.addEventListener("touchstart", onMouseDown, false);
+        //window.addEventListener("touchend", onMouseUp, false);
         window.addEventListener("resize", onWindowResize, false);
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
@@ -163,24 +238,13 @@ var ColorViewer = function () {
         controls.maxPolarAngle = Math.PI * 4;
         controls.maxAzimuthAngle = Infinity;
         controls.minAzimuthAngle = -Infinity;
-        overlay = document.createElement("div");
+        let overlay = document.createElement("div");
         overlay.id = "overlay";
-        var over = document.body.appendChild(overlay);
-        
-        targaColore = document.createElement("div");
-        nomeColore = document.createElement("div");
-        codColore = document.createElement("div");
-        cerchioColore = document.createElement("div");
-        targaColore.className = "targaColore";
-        nomeColore.className = "nomeColore";
-        codColore.className = "codColore";
-        cerchioColore.className = "cerchioColore";
-        
-        var tar = over.appendChild(targaColore);
-        tar.appendChild(nomeColore);
-        tar.appendChild(codColore);
-        over.appendChild(cerchioColore);
+        //overlay.style.paddingTop = windowBorder + "px";
+        //overlay.style.paddingLeft = windowBorder + "px";
+        over = document.body.appendChild(overlay);
         document.body.appendChild(renderer.domElement);
+        //addPointer();
     }
 
     function loadAssets() {
@@ -194,14 +258,15 @@ var ColorViewer = function () {
     }
 
     function mainLoop() {
+        render();        
         window.requestAnimationFrame(mainLoop);
-        render();
     }
     
     function render() {
         if(particleSystem !== undefined) {
             castRay();
         }
+        renderTrackPoints();
         renderer.render(scena, camera);
         controls.update();
     }
@@ -217,12 +282,17 @@ var ColorViewer = function () {
     function RGB(lms) {
         return lms.applyMatrix3(mRGB);
     }
+    
+    function removeGammaCorrection(rgb) {
+        rgb.convertGammaToLinear();
+    }
 
     return {
         init: init,
         loadAssets: loadAssets,
         mainLoop: mainLoop,
-        scena: getScena
+        scena: getScena,
+        trackPoints: trackPoints
     };
 };
 
